@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zouhayr Haqqui · Géomatique</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: the portfolio is a GIS workspace. A "Couches" (layers) panel drives navigation, a status bar reads the cursor as coordinates over Béni Mellal, and selection uses the classic GIS highlight yellow. */
+:root {
+--bg: #F3F5F8;
+--surface: #FFFFFF;
+--ink: #0F1B2D;
+--muted: #5A6778;
+--line: #DCE2E9;
+--accent: #B98000;       /* selection highlight, darkened for light backgrounds */
+--accent-soft: #FFF3C4;
+--blue: #1F6FEB;          /* matches the ring of the portrait */
+--display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+--body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+--mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+--panel: 248px;
+color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+:root:not([data-theme="light"]) {
+--bg: #0A1424; --surface: #101D31; --ink: #E8EEF5; --muted: #93A3B8; --line: #1F2E45;
+--accent: #F5C518; --accent-soft: #3A3210; --blue: #4C9BFF; color-scheme: dark;
+}
+}
+:root[data-theme="dark"] {
+--bg: #0A1424; --surface: #101D31; --ink: #E8EEF5; --muted: #93A3B8; --line: #1F2E45;
+--accent: #F5C518; --accent-soft: #3A3210; --blue: #4C9BFF; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16.5px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
+img { max-width: 100%; display: block; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+.mono { font-family: var(--mono); }
+/* ---------- workspace shell ---------- */
+.shell { display: grid; grid-template-columns: var(--panel) 1fr; min-height: 100%; }
+@media (max-width: 1023px) { .shell { grid-template-columns: 1fr; } }
+/* layers panel */
+.panel { position: sticky; top: 0; height: 100vh; border-right: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; padding: 22px 18px 54px; gap: 22px; }
+@media (max-width: 1023px) { .panel { display: none; } }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; }
+.brand b { font-family: var(--display); font-weight: 800; font-size: 16px; line-height: 1.1; display: block; }
+.brand small { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.panel-title { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.layers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.layers a { display: grid; grid-template-columns: 16px 14px 1fr; align-items: center; gap: 10px; padding: 8px 8px; border-radius: 6px; text-decoration: none; font-size: 14.5px; color: var(--muted); }
+.layers a:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); }
+.layers .chk { width: 14px; height: 14px; border: 1.5px solid var(--muted); border-radius: 3px; display: grid; place-items: center; }
+.layers .sw { width: 14px; height: 10px; border-radius: 2px; }
+.layers a.on { color: var(--ink); background: var(--accent-soft); font-weight: 500; }
+.layers a.on .chk { background: var(--ink); border-color: var(--ink); }
+.layers a.on .chk::after { content: ""; width: 6px; height: 3px; border-left: 2px solid var(--surface); border-bottom: 2px solid var(--surface); transform: rotate(-45deg) translate(1px, -1px); }
+.panel-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.theme-btn { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; cursor: pointer; font-size: 13.5px; }
+.theme-btn:hover { border-color: var(--ink); }
+.theme-btn .mono { font-size: 11px; color: var(--muted); }
+/* mobile top bar */
+.mtop { display: none; position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+@media (max-width: 1023px) { .mtop { display: block; } }
+.mtop .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; }
+.mtop nav { display: flex; gap: 6px; overflow-x: auto; padding: 0 16px 10px; scrollbar-width: none; }
+.mtop nav a { flex: none; font-size: 13px; padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; color: var(--muted); }
+.mtop nav a.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.icon-btn { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+/* status bar */
+.status { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; height: 32px; display: flex; align-items: center; gap: 22px; padding: 0 18px; background: var(--surface); border-top: 1px solid var(--line); font-family: var(--mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.status b { color: var(--ink); font-weight: 500; }
+.status .grow { flex: 1; }
+@media (max-width: 760px) { .status .hide-s { display: none; } }
+/* ---------- main column ---------- */
+main { min-width: 0; padding-bottom: 32px; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 48px); }
+/* hero */
+.hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--line);
+background-image:
+linear-gradient(to right, color-mix(in srgb, var(--line) 70%, transparent) 1px, transparent 1px),
+linear-gradient(to bottom, color-mix(in srgb, var(--line) 70%, transparent) 1px, transparent 1px);
+background-size: 64px 64px; }
+.hero::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 70% 45%, transparent 0 30%, var(--bg) 78%); pointer-events: none; }
+.hero .wrap { position: relative; z-index: 1; display: grid; grid-template-columns: 1.15fr .85fr; gap: clamp(28px, 5vw, 56px); align-items: center; padding-top: clamp(40px, 7vw, 84px); padding-bottom: clamp(44px, 7vw, 84px); }
+@media (max-width: 820px) { .hero .wrap { grid-template-columns: 1fr; } .hero .portrait-wrap { order: -1; justify-self: center; } }
+.kicker { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.kicker i { width: 7px; height: 7px; border-radius: 50%; background: #22A06B; box-shadow: 0 0 0 3px color-mix(in srgb, #22A06B 25%, transparent); }
+.hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(44px, 6.4vw, 82px); line-height: .95; letter-spacing: -.025em; margin: 18px 0 14px; }
+.hero h1 .hl { background: linear-gradient(transparent 62%, color-mix(in srgb, var(--accent) 55%, transparent) 62% 92%, transparent 92%); padding: 0 .04em; }
+.role { font-size: clamp(17px, 1.7vw, 20px); font-weight: 500; margin-bottom: 10px; }
+.lab { font-family: var(--mono); font-size: 13px; color: var(--blue); margin: -4px 0 14px; }
+.lede { color: var(--muted); font-size: clamp(16.5px, 1.6vw, 19px); max-width: 44ch; margin: 0 0 26px; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 10px; text-decoration: none; font-weight: 500; font-size: 15px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; transition: border-color .15s, transform .15s, background .15s; }
+.btn:hover { border-color: var(--ink); transform: translateY(-1px); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { background: var(--blue); border-color: var(--blue); color: #fff; }
+@media (prefers-reduced-motion: reduce) { .btn:hover { transform: none; } }
+.sensors { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 26px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.sensors span::before { content: "◆ "; color: var(--accent); }
+/* portrait with orbiting satellite */
+.portrait-wrap { position: relative; width: clamp(220px, 26vw, 330px); aspect-ratio: 1; justify-self: center; }
+.portrait { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; position: relative; z-index: 2; box-shadow: 0 24px 60px -20px color-mix(in srgb, var(--blue) 55%, transparent); }
+.orbit { position: absolute; inset: -16%; z-index: 1; pointer-events: none; }
+.orbit svg { width: 100%; height: 100%; overflow: visible; }
+.sat { position: absolute; left: 0; top: 0; z-index: 3; display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10.5px; color: var(--ink); pointer-events: none; white-space: nowrap; will-change: transform; }
+.sat i { width: 9px; height: 9px; border-radius: 50%; background: var(--c, var(--accent)); box-shadow: 0 0 0 4px color-mix(in srgb, var(--c, var(--accent)) 30%, transparent); flex: none; }
+.sat span { background: var(--surface); border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; font-size: 10px; }
+@media (max-width: 520px) { .sat span { display: none; } }
+/* figures */
+.figures { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 14px; background: var(--surface); margin-top: -1px; overflow: hidden; }
+@media (max-width: 760px) { .figures { grid-template-columns: 1fr 1fr; } }
+.fig { padding: 20px 20px; border-left: 1px solid var(--line); }
+.fig:first-child { border-left: 0; }
+@media (max-width: 760px) { .fig:nth-child(3) { border-left: 0; } .fig:nth-child(n+3) { border-top: 1px solid var(--line); } }
+.fig b { display: block; font-family: var(--display); font-weight: 800; font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fig b.nowrap { white-space: nowrap; font-size: clamp(22px, 2.6vw, 30px); }
+.fig span { font-size: 13.5px; color: var(--muted); line-height: 1.4; display: block; margin-top: 4px; }
+/* archive band */
+.archive { margin-top: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 18px 20px 14px; }
+.arc-sub { margin: 4px 0 14px; color: var(--muted); font-size: 14.5px; }
+.arc-body { display: grid; grid-template-columns: 1fr 260px; gap: 20px; align-items: start; }
+@media (max-width: 860px) { .arc-body { grid-template-columns: 1fr; } }
+.arc-chart { display: flex; flex-direction: column; gap: 6px; }
+.arc-row { display: grid; grid-template-columns: 128px 1fr; gap: 12px; align-items: center; border: 0; background: transparent; padding: 3px 4px; border-radius: 6px; cursor: pointer; text-align: left; }
+.arc-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.arc-row[aria-selected="true"] { background: var(--accent-soft); }
+.arc-row .lbl { font-size: 13.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arc-track { position: relative; height: 12px; background: color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 3px; }
+.arc-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; }
+.arc-bar.live::after { content: ""; position: absolute; right: -3px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: inherit; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 12%, transparent); }
+.arc-axis { display: grid; grid-template-columns: 128px 1fr; gap: 12px; padding: 0 4px; margin-top: 6px; }
+.arc-axis .ticks { position: relative; height: 16px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.arc-axis .ticks span { position: absolute; transform: translateX(-50%); }
+@media (max-width: 860px) { .arc-axis { margin-top: 2px; } }
+.arc-info { border-left: 3px solid var(--c, var(--accent)); padding: 2px 0 2px 14px; }
+.meteo-tag { display: inline-block; font-family: var(--mono); font-size: 10.5px; padding: 1px 7px; border-radius: 4px; background: color-mix(in srgb, #E5484D 15%, transparent); color: var(--ink); margin-bottom: 4px; }
+.arc-row .mt { font-family: var(--mono); font-size: 9.5px; color: var(--muted); font-weight: 400; }
+.arc-info h3 { font-family: var(--display); font-weight: 700; font-size: 18px; }
+.arc-info .yrs { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
+.arc-info dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; }
+.arc-info dt { color: var(--muted); }
+.arc-info dd { margin: 0; }
+.arc-info p { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+/* sections */
+section.block { padding-top: clamp(64px, 9vw, 104px); }
+.sec-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 28px; }
+.sec-label { font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sec-label .sw { width: 14px; height: 10px; border-radius: 2px; }
+.sec-head h2 { font-family: var(--display); font-weight: 800; font-size: clamp(30px, 4vw, 44px); line-height: 1.05; letter-spacing: -.02em; }
+/* about */
+.about { display: grid; grid-template-columns: 1.3fr 1fr; gap: clamp(24px, 4vw, 48px); }
+@media (max-width: 820px) { .about { grid-template-columns: 1fr; } }
+.about p { margin: 0 0 14px; max-width: 62ch; }
+.about p.big { font-size: clamp(19px, 2vw, 22px); line-height: 1.5; font-weight: 500; }
+.metadata { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 6px 18px; align-self: start; }
+.metadata h3 { font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 500; padding: 12px 0 8px; border-bottom: 1px solid var(--line); }
+.metadata dl { margin: 0; }
+.metadata div { display: grid; grid-template-columns: 110px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+.metadata div:last-child { border-bottom: 0; }
+.metadata dt { font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+.metadata dd { margin: 0; }
+/* tabs + timeline */
+.tabs { display: inline-flex; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); gap: 4px; }
+.tabs button { border: 0; background: transparent; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14.5px; font-weight: 500; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+.timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.timeline::before { content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: var(--line); }
+.timeline > li { position: relative; padding: 0 0 26px 40px; }
+.timeline > li::before { content: ""; position: absolute; left: 0; top: 6px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); border: 2px solid var(--muted); }
+.timeline > li.now::before { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 25%, transparent); }
+.t-card { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 18px 20px; transition: border-color .15s; }
+.t-card:hover { border-color: color-mix(in srgb, var(--ink) 40%, var(--line)); }
+.t-top { display: flex; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; align-items: baseline; }
+.t-card h3 { font-family: var(--display); font-weight: 700; font-size: 19px; line-height: 1.25; }
+.when { font-family: var(--mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.when.live { color: var(--ink); background: var(--accent-soft); padding: 2px 8px; border-radius: 6px; }
+.org { color: var(--muted); font-size: 14.5px; margin: 2px 0 10px; }
+.t-card ul { margin: 0; padding-left: 18px; }
+.t-card ul li { margin-bottom: 4px; max-width: 70ch; }
+.t-card p { margin: 0; color: var(--muted); font-size: 15px; }
+[hidden] { display: none !important; }
+/* services */
+.svc-feature { display: grid; grid-template-columns: 1.6fr 1fr; gap: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); overflow: hidden; }
+@media (max-width: 860px) { .svc-feature { grid-template-columns: 1fr; } }
+.svc-feature > div:first-child { padding: 24px 26px; }
+.badge { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); margin-bottom: 10px; }
+.svc-feature h3 { font-family: var(--display); font-weight: 800; font-size: clamp(24px, 3vw, 30px); line-height: 1.1; margin-bottom: 10px; }
+.svc-feature p { margin: 0 0 16px; color: var(--muted); max-width: 60ch; }
+.map-types { display: flex; flex-wrap: wrap; gap: 8px; }
+.mt-chip { padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; cursor: pointer; font-size: 14px; transition: border-color .15s, background .15s; }
+.mt-chip:hover, .mt-chip[aria-pressed="true"] { border-color: var(--ink); background: var(--accent-soft); }
+.mt-hint { font-size: 13px !important; margin: 12px 0 0 !important; }
+.deliver { background: color-mix(in srgb, var(--blue) 7%, var(--surface)); border-left: 1px solid var(--line); padding: 24px 24px; }
+@media (max-width: 860px) { .deliver { border-left: 0; border-top: 1px solid var(--line); } }
+.deliver h4 { margin: 0 0 10px; font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.deliver ul { list-style: none; margin: 0; padding: 0; }
+.deliver li { padding: 10px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; }
+.deliver li:last-child { border-bottom: 0; }
+.deliver b { font-weight: 600; font-size: 15px; }
+.deliver span { color: var(--muted); font-size: 14px; }
+.svc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 14px; }
+@media (max-width: 980px) { .svc-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .svc-grid { grid-template-columns: 1fr; } }
+.svc { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 18px; }
+.svc-ic { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; font-family: var(--mono); font-size: 15px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); margin-bottom: 12px; }
+.svc h3 { font-family: var(--display); font-weight: 700; font-size: 17px; line-height: 1.25; margin-bottom: 6px; }
+.svc p { margin: 0; font-size: 14.5px; color: var(--muted); }
+.process { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+@media (max-width: 760px) { .process { grid-template-columns: 1fr 1fr; } }
+.process li { padding: 16px 18px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.process li:first-child { border-left: 0; }
+@media (max-width: 760px) { .process li:nth-child(3) { border-left: 0; } .process li:nth-child(n+3) { border-top: 1px solid var(--line); } }
+.process b { font-family: var(--mono); font-size: 12.5px; font-weight: 500; }
+.process span { font-size: 14px; color: var(--muted); }
+.quote { margin-top: 14px; border: 1px solid var(--ink); border-radius: 16px; background: var(--surface); padding: 24px 26px; scroll-margin-top: 24px; }
+.quote-head h3 { font-family: var(--display); font-weight: 800; font-size: 22px; }
+.quote-head p { margin: 4px 0 18px; color: var(--muted); font-size: 15px; }
+.q-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 16px; }
+@media (max-width: 860px) { .q-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .q-grid { grid-template-columns: 1fr; } }
+.q-grid label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.q-grid .full { grid-column: 1 / -1; }
+.q-grid input, .q-grid select, .q-grid textarea { font: inherit; font-size: 15px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; width: 100%; }
+.q-grid textarea { resize: vertical; }
+.q-grid input:focus, .q-grid select:focus, .q-grid textarea:focus { outline: 2px solid var(--blue); outline-offset: 0; border-color: transparent; }
+.q-out { display: grid; grid-template-columns: 1fr auto; gap: 16px; margin-top: 16px; align-items: end; }
+@media (max-width: 760px) { .q-out { grid-template-columns: 1fr; } }
+.q-preview { white-space: pre-wrap; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; color: var(--ink); max-height: 220px; overflow: auto; }
+.q-actions { display: flex; flex-direction: column; gap: 8px; }
+.q-actions .btn { justify-content: center; }
+.price-link { display: inline-block; margin-top: 12px; border: 0; background: none; padding: 0; color: var(--blue); font-weight: 500; font-size: 14px; cursor: pointer; text-decoration: none; }
+.price-link:hover { text-decoration: underline; }
+.trainings { margin-top: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); padding: 24px 26px; scroll-margin-top: 24px; }
+.tr-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 860px) { .tr-grid { grid-template-columns: 1fr; } }
+.tr-card { text-align: left; display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 18px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.tr-card:hover { border-color: color-mix(in srgb, var(--c) 60%, var(--line)); }
+.tr-card[aria-pressed="true"] { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent); background: var(--surface); }
+.tr-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tr-chk { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--muted); display: grid; place-items: center; }
+.tr-card[aria-pressed="true"] .tr-chk { background: var(--c); border-color: var(--c); }
+.tr-card[aria-pressed="true"] .tr-chk::after { content: ""; width: 7px; height: 4px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg) translate(1px, -1px); }
+.tr-tag { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.tr-card b { font-family: var(--display); font-weight: 700; font-size: 18px; line-height: 1.2; }
+.tr-list { font-size: 14px; color: var(--muted); line-height: 1.5; }
+.tr-options { display: flex; flex-wrap: wrap; gap: 14px 24px; margin-top: 18px; align-items: flex-end; }
+.opt { display: flex; flex-direction: column; gap: 6px; }
+.opt-l { font-size: 13px; font-weight: 500; color: var(--muted); }
+.seg { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); gap: 2px; flex-wrap: wrap; }
+.seg button { border: 0; background: transparent; padding: 7px 13px; border-radius: 7px; cursor: pointer; font-size: 14px; color: var(--muted); }
+.seg button[aria-checked="true"] { background: var(--ink); color: var(--bg); }
+.opt input[type="number"] { font: inherit; width: 110px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+/* projects */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 20px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 7px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); cursor: pointer; font-size: 14px; color: var(--muted); transition: border-color .15s, color .15s; }
+.chip:hover { border-color: var(--ink); color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.chip .sw { width: 12px; height: 9px; border-radius: 2px; }
+.chip .n { font-family: var(--mono); font-size: 11.5px; opacity: .7; }
+.active-tool { display: none; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12.5px; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--ink); }
+.active-tool.show { display: inline-flex; }
+.active-tool button { border: 0; background: var(--ink); color: var(--bg); border-radius: 999px; width: 22px; height: 22px; cursor: pointer; line-height: 1; }
+.result-count { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; }
+.projects { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+@media (max-width: 760px) { .projects { grid-template-columns: 1fr; } }
+.p-card { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); display: flex; flex-direction: column; transition: border-color .15s, box-shadow .15s; }
+.p-card:hover { border-color: color-mix(in srgb, var(--ink) 40%, var(--line)); }
+.p-card.open { border-color: var(--ink); box-shadow: 0 0 0 3px var(--accent-soft); }
+.p-head { display: flex; flex-direction: column; gap: 8px; padding: 18px 20px 16px; text-align: left; border: 0; background: transparent; cursor: pointer; width: 100%; border-radius: 14px; }
+.p-meta { display: flex; justify-content: space-between; gap: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.p-dom { display: inline-flex; align-items: center; gap: 7px; }
+.p-dom .sw { width: 12px; height: 9px; border-radius: 2px; }
+.p-card h3 { font-family: var(--display); font-weight: 700; font-size: 19px; line-height: 1.25; }
+.p-sum { color: var(--muted); font-size: 15px; margin: 0; }
+.p-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.p-tags span { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.p-tags span.match { background: var(--accent-soft); outline: 1px solid var(--accent); }
+.p-more { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 500; color: var(--blue); margin-top: 4px; }
+.p-more .arr { transition: transform .2s; display: inline-block; }
+.p-card.open .p-more .arr { transform: rotate(180deg); }
+.p-detail { padding: 0 20px 20px; display: grid; gap: 14px; border-top: 1px dashed var(--line); margin: 0 20px; padding-left: 0; padding-right: 0; padding-top: 16px; }
+.p-detail h4 { margin: 0 0 4px; font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.p-detail p, .p-detail ul { margin: 0; font-size: 15px; }
+.p-detail ul { padding-left: 18px; }
+.empty { grid-column: 1 / -1; padding: 30px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 14px; }
+/* skills */
+.skills { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+@media (max-width: 760px) { .skills { grid-template-columns: 1fr; } }
+.s-card { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 18px 20px; }
+.s-card h3 { font-family: var(--display); font-weight: 700; font-size: 18px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+.s-card h3 .sw { width: 14px; height: 10px; border-radius: 2px; }
+.s-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.s-list .tool { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent; font-size: 14px; cursor: pointer; transition: border-color .15s, background .15s; }
+.s-list .tool:hover { border-color: var(--ink); background: var(--accent-soft); }
+.s-list .tool sup { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: 4px; }
+.s-list span.plain { padding: 6px 12px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 5%, transparent); font-size: 14px; }
+.hint { font-size: 14px; color: var(--muted); margin: 0 0 16px; }
+.langs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 14px; }
+@media (max-width: 760px) { .langs { grid-template-columns: 1fr 1fr; } }
+.lang { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 14px 16px; }
+.lang b { display: block; font-size: 16px; }
+.lang span { font-size: 13.5px; color: var(--muted); }
+.lang .bar { height: 5px; border-radius: 3px; background: var(--line); margin-top: 10px; overflow: hidden; }
+.lang .bar i { display: block; height: 100%; background: var(--blue); }
+/* contact */
+.contact { margin-top: clamp(64px, 9vw, 104px); border-radius: 20px; background: var(--ink); color: var(--bg); padding: clamp(32px, 5vw, 56px); position: relative; overflow: hidden; }
+.contact::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(to right, color-mix(in srgb, var(--bg) 8%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--bg) 8%, transparent) 1px, transparent 1px); background-size: 48px 48px; pointer-events: none; }
+.contact > * { position: relative; }
+.contact h2 { font-family: var(--display); font-weight: 800; font-size: clamp(30px, 4.6vw, 52px); line-height: 1.02; letter-spacing: -.02em; max-width: 18ch; }
+.contact p.lead { color: color-mix(in srgb, var(--bg) 72%, var(--ink)); max-width: 52ch; margin: 14px 0 26px; }
+.channels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 820px) { .channels { grid-template-columns: 1fr; } }
+.channel { border: 1px solid color-mix(in srgb, var(--bg) 22%, var(--ink)); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.channel small { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: color-mix(in srgb, var(--bg) 60%, var(--ink)); }
+.channel .val { font-size: 16.5px; word-break: break-word; text-decoration: none; }
+.channel a.val:hover { color: var(--accent); }
+.channel .acts { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.mini { font-family: var(--mono); font-size: 11.5px; border: 1px solid color-mix(in srgb, var(--bg) 35%, var(--ink)); background: transparent; color: var(--bg); padding: 5px 10px; border-radius: 6px; cursor: pointer; text-decoration: none; }
+.mini:hover { border-color: var(--accent); color: var(--accent); }
+.foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--muted); padding: 28px 0 24px; }
+/* toast */
+.toast { position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%) translateY(20px); opacity: 0; z-index: 40; background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 10px; font-size: 14px; transition: opacity .2s, transform .2s; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="shell">
+<!-- Layers panel -->
+<aside class="panel" aria-label="Navigation">
+<a class="brand" href="#accueil">
+<img data-photo src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="" width="38" height="38">
+<span><b>Zouhayr Haqqui</b><small>Géomatique · SIG · Télédétection</small></span>
+</a>
+<div>
+<div class="panel-title"><span>Couches</span><span>7</span></div>
+<ul class="layers" id="layers"></ul>
+</div>
+<div class="panel-foot">
+<a class="btn primary" href="#contact" style="justify-content:center">Me contacter</a>
+<button class="theme-btn" type="button" id="theme-btn"><span>Thème</span><span class="mono" id="theme-label">auto</span></button>
+</div>
+</aside>
+<div>
+<!-- Mobile bar -->
+<header class="mtop">
+<div class="row">
+<a class="brand" href="#accueil"><img data-photo src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="" width="32" height="32" style="width:32px;height:32px"><span><b>Zouhayr Haqqui</b></span></a>
+<button class="icon-btn" type="button" id="theme-btn-m">Thème</button>
+</div>
+<nav id="mnav" aria-label="Sections"></nav>
+</header>
+<main>
+<!-- HERO -->
+<section class="hero" id="accueil" data-layer>
+<div class="wrap">
+<div>
+<span class="kicker"><i></i>Disponible pour collaborations, missions et formations</span>
+<h1>Zouhayr<br><span class="hl">Haqqui</span></h1>
+<div class="role">Doctorant-chercheur en Géomatique Environnementale</div>
+<div class="lab">Laboratoire Data Science for Sustainable Earth (Data4Earth)</div>
+<p class="lede">Je transforme les images satellitaires et les données de drone en informations utiles pour l'environnement, l'agriculture et la gestion de l'eau.</p>
+<div class="cta">
+<a class="btn primary" href="#projets">Explorer mes projets</a>
+<a class="btn" href="#contact">Me contacter</a>
+<a class="btn" href="https://www.linkedin.com/in/zouhayrhaqqui">LinkedIn ↗</a>
+</div>
+</div>
+<div class="portrait-wrap" id="portrait-wrap">
+<div class="orbit" aria-hidden="true">
+<svg viewBox="0 0 100 100" preserveAspectRatio="none">
+<ellipse cx="50" cy="50" rx="49" ry="17" transform="rotate(-18 50 50)" fill="none" stroke="currentColor" stroke-width=".35" stroke-dasharray="1.4 1.4" style="color: var(--muted)"/>
+<ellipse cx="50" cy="50" rx="45" ry="21" transform="rotate(22 50 50)" fill="none" stroke="currentColor" stroke-width=".3" stroke-dasharray=".6 1.6" style="color: var(--muted)"/>
+<ellipse cx="50" cy="50" rx="44" ry="12" transform="rotate(80 50 50)" fill="none" stroke="currentColor" stroke-width=".25" stroke-dasharray="2 2" style="color: var(--muted)"/>
+<circle cx="50" cy="50" r="50" fill="none" stroke="currentColor" stroke-width=".2" stroke-dasharray=".3 1.2" style="color: var(--muted)"/>
+</svg>
+</div>
+<img class="portrait" data-photo src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Portrait de Zouhayr Haqqui" width="360" height="360">
+<div id="sats" aria-hidden="true"></div>
+</div>
+</div>
+</section>
+<div class="wrap">
+<div class="figures" role="list">
+<div class="fig" role="listitem"><b>25+</b><span>personnes formées en SIG et télédétection</span></div>
+<div class="fig" role="listitem"><b>+10</b><span>projets académiques en géomatique</span></div>
+<div class="fig" role="listitem"><b class="nowrap">1972 → auj.</b><span>séries temporelles satellitaires analysées</span></div>
+<div class="fig" role="listitem"><b>CRSA</b><span>expérience au sein de l'UM6P</span></div>
+</div>
+<!-- ARCHIVE -->
+<div class="archive" id="archive">
+<div class="arc-head">
+<div><div class="sec-label" style="margin:0"><span class="sw" style="background:#22A06B"></span>Archive satellitaire exploitée</div>
+<p class="arc-sub">Plus de cinquante ans d'images d'observation de la Terre et de satellites météo. Sélectionnez une mission.</p></div>
+</div>
+<div class="arc-body">
+<div>
+<div class="arc-chart" role="listbox" aria-label="Missions satellitaires" id="arc-rows"></div>
+<div class="arc-axis" id="arc-axis" aria-hidden="true"></div>
+</div>
+<div class="arc-info" id="arc-info" aria-live="polite"></div>
+</div>
+</div>
+<!-- PROFIL -->
+<section class="block" id="profil" data-layer>
+<div class="sec-head"><div><div class="sec-label"><span class="sw" style="background:#4C9BFF"></span>Profil</div><h2>Lire le territoire depuis l'orbite</h2></div></div>
+<div class="about">
+<div>
+<p class="big">Doctorant-chercheur en première année au laboratoire Data Science for Sustainable Earth (Data4Earth), titulaire d'un Master en Géomatique Environnementale, je mets la télédétection et les SIG au service de l'environnement, de l'agriculture et des ressources naturelles.</p>
+<p>Mon travail consiste à transformer les données satellitaires et de drone en informations utiles à la décision : suivi de la végétation et de l'occupation du sol, cartographie des inondations, modélisation de l'érosion, suivi des ressources en eau et de la salinité des sols.</p>
+<p>J'ai été prestataire au Center for Remote Sensing Applications (CRSA) de l'UM6P, et j'anime des formations à distance en SIG et télédétection pour des étudiants, des doctorants et des chercheurs.</p>
+</div>
+<aside class="metadata" aria-label="Fiche d'identité">
+<h3>Métadonnées</h3>
+<dl>
+<div><dt>Statut</dt><dd>Doctorant, 1re année</dd></div>
+<div><dt>Laboratoire</dt><dd>Data Science for Sustainable Earth (Data4Earth)</dd></div>
+<div><dt>Établissement</dt><dd>FST Béni Mellal</dd></div>
+<div><dt>Spécialité</dt><dd>Géomatique environnementale</dd></div>
+<div><dt>Localisation</dt><dd>Béni Mellal, Maroc</dd></div>
+<div><dt>Emprise</dt><dd class="mono" style="font-size:13px">32°20′N · 6°21′W</dd></div>
+<div><dt>Disponibilité</dt><dd>Collaborations, conseil, formation</dd></div>
+</dl>
+</aside>
+</div>
+</section>
+<!-- SERVICES -->
+<section class="block" id="services" data-layer>
+<div class="sec-head"><div><div class="sec-label"><span class="sw" style="background:#F08C2E"></span>Services</div><h2>Ce que je peux réaliser pour vous</h2></div>
+<div class="cta"><a class="btn" href="#formations">Formations</a><a class="btn primary" href="#devis">Demander un prix</a></div></div>
+<div class="svc-feature">
+<div>
+<span class="badge">Service principal</span>
+<h3>Création de cartes thématiques</h3>
+<p>Des cartes claires et prêtes à l'emploi pour vos mémoires, thèses, rapports d'études, articles scientifiques ou présentations. Chaque carte est livrée avec une mise en page complète : titre, légende, échelle, flèche du nord, coordonnées et sources.</p>
+<div class="map-types" role="group" aria-label="Types de cartes">
+<button type="button" class="mt-chip" data-map="Carte de localisation de la zone d'étude">Localisation</button>
+<button type="button" class="mt-chip" data-map="Carte d'occupation du sol">Occupation du sol</button>
+<button type="button" class="mt-chip" data-map="Carte de végétation (NDVI)">Végétation (NDVI)</button>
+<button type="button" class="mt-chip" data-map="Carte des risques (inondation, érosion, sécheresse)">Risques naturels</button>
+<button type="button" class="mt-chip" data-map="Carte hydrologique (bassin versant, réseau hydrographique)">Hydrologie</button>
+<button type="button" class="mt-chip" data-map="Carte du relief (MNT, pentes, altitudes)">Relief et pentes</button>
+<button type="button" class="mt-chip" data-map="Carte climatique (pluie, température)">Climat</button>
+<button type="button" class="mt-chip" data-map="Carte d'évolution (avant / après)">Évolution dans le temps</button>
+</div>
+<p class="mt-hint">Cliquez sur un type de carte pour préparer votre demande.</p>
+</div>
+<div class="deliver">
+<h4>Livrables</h4>
+<ul>
+<li><b>Image haute résolution</b><span>PNG ou JPEG, 300 dpi</span></li>
+<li><b>Carte imprimable</b><span>PDF, du format A4 au poster A0</span></li>
+<li><b>Données SIG</b><span>Shapefile ou GeoPackage, sur demande</span></li>
+<li><b>Projet modifiable</b><span>QGIS ou ArcGIS Pro, sur demande</span></li>
+</ul>
+</div>
+</div>
+<div class="svc-grid">
+<div class="svc"><span class="svc-ic" style="--c:#1F6FEB">◰</span><h3>Traitement d'images satellitaires</h3><p>Sentinel, Landsat, MODIS et satellites météo : indices spectraux, classification de l'occupation du sol, détection des changements.</p><button type="button" class="price-link" data-quote="Traitement d'images satellitaires">Demander le prix →</button></div>
+<div class="svc"><span class="svc-ic" style="--c:#22A06B">⌗</span><h3>SIG et analyse spatiale</h3><p>Bases de données géographiques, géoréférencement, numérisation, analyses spatiales et statistiques.</p><button type="button" class="price-link" data-quote="SIG et analyse spatiale">Demander le prix →</button></div>
+<div class="svc"><span class="svc-ic" style="--c:#A26EF0">{ }</span><h3>Scripts Google Earth Engine</h3><p>Automatisation des traitements et analyse de longues séries temporelles, de 1972 à aujourd'hui.</p><button type="button" class="price-link" data-quote="Script Google Earth Engine">Demander le prix →</button></div>
+<div class="svc"><span class="svc-ic" style="--c:#E5484D">◎</span><h3>Formations</h3><p>Télédétection, Google Earth Engine et SIG : en cours, en TP ou les deux, à distance, en individuel ou en groupe.</p><a class="price-link" href="#formations">Choisir une formation →</a></div>
+</div>
+<ol class="process" aria-label="Déroulement d'une commande">
+<li><b>1 · Votre besoin</b><span>Zone d'étude, type de carte, format et délai.</span></li>
+<li><b>2 · Devis</b><span>Proposition personnalisée et délai convenu ensemble.</span></li>
+<li><b>3 · Réalisation</b><span>Données, traitement, mise en page et aperçu.</span></li>
+<li><b>4 · Livraison</b><span>Fichiers finaux après vos corrections.</span></li>
+</ol>
+<!-- trainings -->
+<div class="trainings" id="formations">
+<div class="quote-head">
+<span class="badge">Formations</span>
+<h3>Choisissez votre formation</h3>
+<p>Sélectionnez une ou plusieurs formations, puis le format : cours théoriques, travaux pratiques sur données réelles, ou les deux. Le message de demande de prix se prépare automatiquement.</p>
+</div>
+<div class="tr-grid" role="group" aria-label="Formations">
+<button type="button" class="tr-card" data-tr="Télédétection" aria-pressed="true" style="--c:#1F6FEB">
+<span class="tr-top"><span class="tr-chk"></span><span class="tr-tag">Observation de la Terre</span></span>
+<b>Formation en télédétection</b>
+<span class="tr-list">Principes physiques et capteurs (Sentinel, Landsat, MODIS) · prétraitement des images · indices spectraux (NDVI, NDWI…) · classification · détection des changements</span>
+</button>
+<button type="button" class="tr-card" data-tr="Google Earth Engine" aria-pressed="false" style="--c:#A26EF0">
+<span class="tr-top"><span class="tr-chk"></span><span class="tr-tag">Cloud et programmation</span></span>
+<b>Formation Google Earth Engine</b>
+<span class="tr-list">Interface et code JavaScript · collections d'images et filtres · masque des nuages · séries temporelles · classification Random Forest · export des résultats</span>
+</button>
+<button type="button" class="tr-card" data-tr="SIG" aria-pressed="false" style="--c:#22A06B">
+<span class="tr-top"><span class="tr-chk"></span><span class="tr-tag">QGIS · ArcGIS Pro</span></span>
+<b>Formation en SIG</b>
+<span class="tr-list">Données vecteur et raster · systèmes de coordonnées · géoréférencement et numérisation · analyses spatiales · mise en page de cartes</span>
+</button>
+</div>
+<div class="tr-options">
+<div class="opt">
+<span class="opt-l" id="fmt-l">Format</span>
+<div class="seg" role="radiogroup" aria-labelledby="fmt-l">
+<button type="button" role="radio" aria-checked="false" data-fmt="Cours (théorie)">Cours</button>
+<button type="button" role="radio" aria-checked="false" data-fmt="TP (travaux pratiques)">TP</button>
+<button type="button" role="radio" aria-checked="true" data-fmt="Cours + TP">Cours + TP</button>
+</div>
+</div>
+<div class="opt">
+<span class="opt-l" id="who-l">Participants</span>
+<div class="seg" role="radiogroup" aria-labelledby="who-l">
+<button type="button" role="radio" aria-checked="true" data-who="Individuel">Individuel</button>
+<button type="button" role="radio" aria-checked="false" data-who="Groupe">Groupe</button>
+</div>
+</div>
+<div class="opt" id="grp-size" hidden>
+<label class="opt-l" for="t-n">Nombre de personnes</label>
+<input id="t-n" type="number" min="2" max="100" value="5">
+</div>
+<div class="opt">
+<span class="opt-l" id="lvl-l">Niveau</span>
+<div class="seg" role="radiogroup" aria-labelledby="lvl-l">
+<button type="button" role="radio" aria-checked="true" data-lvl="Débutant">Débutant</button>
+<button type="button" role="radio" aria-checked="false" data-lvl="Intermédiaire">Intermédiaire</button>
+<button type="button" role="radio" aria-checked="false" data-lvl="Avancé">Avancé</button>
+</div>
+</div>
+<div class="opt">
+<span class="opt-l" id="mod-l">Modalité</span>
+<div class="seg" role="radiogroup" aria-labelledby="mod-l">
+<button type="button" role="radio" aria-checked="true" data-mod="À distance">À distance</button>
+<button type="button" role="radio" aria-checked="false" data-mod="En présentiel">En présentiel</button>
+</div>
+</div>
+</div>
+<div class="q-grid" style="margin-top:12px">
+<label for="t-name">Votre nom<input id="t-name" type="text" placeholder="Prénom et nom"></label>
+<label for="t-msg" class="full" style="grid-column: span 2">Précisions<input id="t-msg" type="text" placeholder="Dates souhaitées, thème de votre recherche, logiciel préféré…"></label>
+</div>
+<div class="q-out">
+<div class="q-preview" id="t-preview" aria-live="polite"></div>
+<div class="q-actions">
+<a class="btn primary" id="t-wa" href="#">Demander le prix sur WhatsApp ↗</a>
+<a class="btn" id="t-mail" href="#">Demander par email</a>
+<button class="btn" type="button" id="t-copy">Copier le message</button>
+</div>
+</div>
+</div>
+<!-- quote builder -->
+<div class="quote" id="devis">
+<div class="quote-head">
+<h3>Demander le prix d'une carte ou d'une analyse</h3>
+<p>Remplissez ces champs : le message est rédigé automatiquement, prêt à envoyer par WhatsApp ou par email. Je vous réponds avec un prix et un délai.</p>
+</div>
+<form id="quote-form" novalidate>
+<div class="q-grid">
+<label for="q-type">Type de carte
+<select id="q-type">
+<option>Carte de localisation de la zone d'étude</option>
+<option>Carte d'occupation du sol</option>
+<option>Carte de végétation (NDVI)</option>
+<option>Carte des risques (inondation, érosion, sécheresse)</option>
+<option>Carte hydrologique (bassin versant, réseau hydrographique)</option>
+<option>Carte du relief (MNT, pentes, altitudes)</option>
+<option>Carte climatique (pluie, température)</option>
+<option>Carte d'évolution (avant / après)</option>
+<option>Traitement d'images satellitaires</option>
+<option>SIG et analyse spatiale</option>
+<option>Script Google Earth Engine</option>
+<option>Autre</option>
+</select>
+</label>
+<label for="q-zone">Zone d'étude
+<input id="q-zone" type="text" placeholder="Ex. : province de Béni Mellal">
+</label>
+<label for="q-usage">Utilisation
+<select id="q-usage">
+<option>Mémoire ou thèse</option>
+<option>Rapport d'étude</option>
+<option>Article scientifique</option>
+<option>Présentation</option>
+<option>Affichage ou impression</option>
+<option>Autre</option>
+</select>
+</label>
+<label for="q-format">Format
+<select id="q-format">
+<option>Image numérique (PNG / JPEG)</option>
+<option>A4</option>
+<option>A3</option>
+<option>Poster A0</option>
+<option>Avec données SIG</option>
+</select>
+</label>
+<label for="q-delay">Délai souhaité
+<select id="q-delay">
+<option>Moins d'une semaine</option>
+<option>1 à 2 semaines</option>
+<option>Flexible</option>
+</select>
+</label>
+<label for="q-name">Votre nom
+<input id="q-name" type="text" placeholder="Prénom et nom">
+</label>
+<label for="q-msg" class="full">Précisions
+<textarea id="q-msg" rows="3" placeholder="Nombre de cartes, données disponibles, langue de la carte…"></textarea>
+</label>
+</div>
+<div class="q-out">
+<div class="q-preview" id="q-preview" aria-live="polite"></div>
+<div class="q-actions">
+<a class="btn primary" id="q-wa" href="#">Demander le prix sur WhatsApp ↗</a>
+<a class="btn" id="q-mail" href="#">Demander par email</a>
+<button class="btn" type="button" id="q-copy">Copier le message</button>
+</div>
+</div>
+</form>
+</div>
+</section>
+<!-- PARCOURS -->
+<section class="block" id="parcours" data-layer>
+<div class="sec-head">
+<div><div class="sec-label"><span class="sw" style="background:#22A06B"></span>Parcours</div><h2>Expériences et formation</h2></div>
+<div class="tabs" role="tablist" aria-label="Parcours">
+<button role="tab" id="tab-exp" aria-selected="true" aria-controls="panel-exp" type="button">Expériences</button>
+<button role="tab" id="tab-edu" aria-selected="false" aria-controls="panel-edu" type="button">Formation</button>
+</div>
+</div>
+<div role="tabpanel" id="panel-exp" aria-labelledby="tab-exp">
+<ol class="timeline">
+<li class="now"><div class="t-card">
+<div class="t-top"><h3>Formateur en SIG et télédétection (à distance)</h3><span class="when live">Août 2026 – Présent</span></div>
+<div class="org">Indépendant</div>
+<ul>
+<li>Conception et animation de formations pour plus de 25 participants : étudiants de Licence et de Master, doctorants et chercheurs.</li>
+<li>Fondamentaux du SIG et de la télédétection, travaux pratiques sous Google Earth Engine (Sentinel, Landsat, indices spectraux, classification).</li>
+<li>Création de supports pédagogiques : fiches de séance, scripts et tutoriels.</li>
+</ul>
+</div></li>
+<li><div class="t-card">
+<div class="t-top"><h3>Prestataire de services, Télédétection &amp; spectroscopie des sols</h3><span class="when">Juil. – Sept. 2026</span></div>
+<div class="org">Center for Remote Sensing Applications (CRSA), UM6P · Ben Guerir</div>
+<ul>
+<li>Mesures spectrales en laboratoire et base de données couplant spectroscopie et télédétection, avec acquisition automatisée par scripts.</li>
+<li>Traitement d'images multi-sources, analyses spatiales et statistiques, rédaction d'un guide méthodologique.</li>
+<li>Cartes de salinité des sols de Sehb El Masjoune, rapports scientifiques, formation et appui technique à l'équipe.</li>
+</ul>
+</div></li>
+<li><div class="t-card">
+<div class="t-top"><h3>Stage de recherche, mémoire de Master</h3><span class="when">Févr. – Juin 2026</span></div>
+<div class="org">Programme Al Moutmir (OCP – CRSA / UM6P) · Ben Guerir</div>
+<ul>
+<li>Suivi spatio-temporel de la végétation (2000–2025) et de son interaction avec la salinité des sols dans la Sebkha de Sehb El Masjoune.</li>
+<li>Validation des résultats par des observations de terrain.</li>
+</ul>
+</div></li>
+<li><div class="t-card">
+<div class="t-top"><h3>Stage, mise en place d'un SIG pour la gestion territoriale</h3><span class="when">Août – Sept. 2025</span></div>
+<div class="org">Commune de Demnate</div>
+<ul><li>Conception d'une base de données géographiques, intégration des données spatiales et cartes thématiques d'aide à la décision.</li></ul>
+</div></li>
+<li><div class="t-card">
+<div class="t-top"><h3>Stage, mémoire de Licence</h3><span class="when">Avr. – Juin 2024</span></div>
+<div class="org">Agence Nationale des Eaux et Forêts (ANEF) · Béni Mellal</div>
+<ul><li>Dynamique de la végétation du Parc National de Khénifra : évolution de l'occupation du sol par images satellitaires, cartes thématiques et rapport technique.</li></ul>
+</div></li>
+</ol>
+</div>
+<div role="tabpanel" id="panel-edu" aria-labelledby="tab-edu" hidden>
+<ol class="timeline">
+<li class="now"><div class="t-card">
+<div class="t-top"><h3>Doctorat en Géomatique Environnementale</h3><span class="when live">2026 – Présent</span></div>
+<div class="org">Laboratoire Data Science for Sustainable Earth (Data4Earth) · Faculté des Sciences et Techniques · Béni Mellal</div>
+<p>Recherche en télédétection et intelligence artificielle appliquées à l'agriculture.</p>
+</div></li>
+<li><div class="t-card">
+<div class="t-top"><h3>Master en Géomatique Environnementale</h3><span class="when">2024 – 2026</span></div>
+<div class="org" style="margin-bottom:0">Faculté des Sciences et Techniques · Béni Mellal</div>
+</div></li>
+<li><div class="t-card">
+<div class="t-top"><h3>Licence en Géomatique et Aménagement du Territoire</h3><span class="when">2023 – 2024</span></div>
+<div class="org" style="margin-bottom:0">Faculté des Sciences et Techniques · Béni Mellal</div>
+</div></li>
+<li><div class="t-card">
+<div class="t-top"><h3>DEUST Biologie, Chimie, Géologie</h3><span class="when">2020 – 2023</span></div>
+<div class="org" style="margin-bottom:0">Faculté des Sciences et Techniques · Béni Mellal</div>
+</div></li>
+<li><div class="t-card">
+<div class="t-top"><h3>Baccalauréat Sciences de la Vie et de la Terre</h3><span class="when">2019 – 2020</span></div>
+<div class="org" style="margin-bottom:0">Lycée Youssef Ben Tachfine · Demnate</div>
+</div></li>
+</ol>
+</div>
+</section>
+<!-- PROJETS -->
+<section class="block" id="projets" data-layer>
+<div class="sec-head"><div><div class="sec-label"><span class="sw" style="background:#F5C518"></span>Projets</div><h2>Ce que la donnée m'a permis de cartographier</h2></div></div>
+<div class="filters" id="filters" role="group" aria-label="Filtrer par domaine"></div>
+<div class="filters" style="margin-top:-8px">
+<span class="active-tool" id="active-tool"><span id="active-tool-label"></span><button type="button" id="clear-tool" aria-label="Retirer le filtre outil">×</button></span>
+<span class="result-count" id="result-count"></span>
+</div>
+<div class="projects" id="projects"></div>
+</section>
+<!-- COMPETENCES -->
+<section class="block" id="competences" data-layer>
+<div class="sec-head"><div><div class="sec-label"><span class="sw" style="background:#E5484D"></span>Compétences</div><h2>Outils et savoir-faire</h2></div></div>
+<p class="hint">Cliquez sur un outil ou une donnée pour voir les projets où je l'ai utilisé.</p>
+<div class="skills">
+<div class="s-card"><h3><span class="sw" style="background:#4C9BFF"></span>Données et capteurs</h3><div class="s-list" data-tools="Sentinel-1|Sentinel-2|Landsat|Landsat 8 / 9|MODIS|Meteosat|MetOp (AVHRR)|GPM (pluies)|Drone (UAV)|MNT"></div></div>
+<div class="s-card"><h3><span class="sw" style="background:#22A06B"></span>Logiciels et plateformes</h3><div class="s-list" data-tools="Google Earth Engine|QGIS|ArcGIS Pro|SNAP|ENVI|PostgreSQL"></div></div>
+<div class="s-card"><h3><span class="sw" style="background:#F5C518"></span>Méthodes</h3><div class="s-list" data-tools="Classification|Random Forest|Machine learning|Détection de changements|Indices spectraux|Interpolation"></div></div>
+<div class="s-card"><h3><span class="sw" style="background:#E5484D"></span>Programmation et domaines</h3><div class="s-list">
+<span class="plain">Python</span><span class="plain">R</span><span class="plain">MATLAB</span><span class="plain">Hydrologie et bassins versants</span><span class="plain">Risques naturels</span><span class="plain">Changements climatiques</span><span class="plain">Statistiques spatiales</span>
+</div></div>
+</div>
+<div class="langs">
+<div class="lang"><b>Arabe</b><span>Langue maternelle</span></div>
+<div class="lang"><b>Amazigh</b><span>Langue maternelle</span></div>
+<div class="lang"><b>Français</b><span>Niveau professionnel</span></div>
+<div class="lang"><b>Anglais</b><span>Niveau professionnel</span></div>
+</div>
+</section>
+<!-- CONTACT -->
+<section class="contact" id="contact" data-layer>
+<div class="sec-label" style="color:inherit;opacity:.7"><span class="sw" style="background:#F5C518"></span>Contact</div>
+<h2>Besoin d'une carte, d'une analyse ou d'une formation ?</h2>
+<p class="lead">Collaboration scientifique, mission de conseil ou formation en SIG et télédétection : écrivez-moi, je réponds rapidement.</p>
+<div class="channels">
+<div class="channel">
+<small>Email</small>
+<a class="val" href="mailto:zouhayrhaqqui2@gmail.com">zouhayrhaqqui2@gmail.com</a>
+<div class="acts"><button class="mini" type="button" data-copy="zouhayrhaqqui2@gmail.com">Copier</button></div>
+</div>
+<div class="channel">
+<small>Téléphone</small>
+<span class="val">+212 6 16 39 33 77</span>
+<div class="acts"><button class="mini" type="button" data-copy="+212616393377">Copier</button><a class="mini" href="https://wa.me/212616393377">WhatsApp ↗</a></div>
+</div>
+<div class="channel">
+<small>LinkedIn</small>
+<a class="val" href="https://www.linkedin.com/in/zouhayrhaqqui">linkedin.com/in/zouhayrhaqqui</a>
+<div class="acts"><a class="mini" href="https://www.linkedin.com/in/zouhayrhaqqui">Voir le profil ↗</a></div>
+</div>
+</div>
+</section>
+<div class="foot"><span>© 2026 Zouhayr Haqqui</span><span>WGS 84 · EPSG:4326</span></div>
+</div>
+</main>
+</div>
+</div>
+<div class="status" aria-hidden="true">
+<span>Couche <b id="st-layer">Accueil</b></span>
+<span class="hide-s">Curseur <b id="st-coord">32.3400°N 6.3500°W</b></span>
+<span class="grow"></span>
+<span class="hide-s">Échelle 1:25 000</span>
+<span>EPSG:4326</span>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script>
+var PHOTO="data:image/jpeg;base64,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";
+Array.prototype.forEach.call(document.querySelectorAll("img[data-photo]"),function(i){i.src=PHOTO;});
+(function () {
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+/* ---------- data ---------- */
+var DOMAINS = {
+agri:   { label: "Agriculture & sols", color: "#22A06B" },
+eau:    { label: "Ressources en eau", color: "#4C9BFF" },
+risque: { label: "Risques naturels", color: "#E5484D" },
+urbain: { label: "Urbain & territoire", color: "#F5C518" },
+climat: { label: "Climat", color: "#A26EF0" }
+};
+var PROJECTS = [
+{ d: "agri", t: "Végétation et salinité des sols, Sebkha de Sehb El Masjoune", when: "2000–2025", ctx: "Mémoire de Master · Al Moutmir (OCP – CRSA / UM6P)",
+sum: "Suivi spatio-temporel de la végétation et de son interaction avec la salinité des sols.",
+goal: "Comprendre comment la salinité des sols influence la dynamique de la végétation autour de la sebkha.",
+steps: ["Cartographie de la végétation par télédétection et SIG.", "Analyse de l'évolution spatio-temporelle entre 2000 et 2025.", "Évaluation de l'impact de la salinité sur la dynamique de la végétation.", "Validation des résultats par des observations de terrain."],
+tools: ["Landsat", "Indices spectraux", "Détection de changements"] },
+{ d: "agri", t: "Détection des mauvaises herbes par drone", when: "Projet académique", ctx: "Verger d'agrumes · bassin du Tadla",
+sum: "Classification d'images UAV multispectrales par machine learning pour l'agriculture de précision.",
+goal: "Distinguer les mauvaises herbes des arbres et du sol nu à très haute résolution.",
+steps: ["Exploitation de données UAV multispectrales.", "Application d'algorithmes de machine learning et d'approches de classification.", "Production de cartes utiles à l'agriculture de précision."],
+tools: ["Drone (UAV)", "Machine learning", "Classification"] },
+{ d: "risque", t: "Cartographie des inondations", when: "Projet GEE", ctx: "Ksar El Kebir",
+sum: "Détection des zones inondées par fusion de données optiques et radar.",
+goal: "Délimiter l'emprise de l'inondation, y compris sous couverture nuageuse.",
+steps: ["Indice MNDWI sur Sentinel-2 pour l'eau libre.", "Seuillage de la rétrodiffusion Sentinel-1 pour les zones nuageuses.", "Fusion des deux sources et analyse des zones exposées."],
+tools: ["Sentinel-1", "Sentinel-2", "Indices spectraux", "Google Earth Engine", "Détection de changements"] },
+{ d: "urbain", t: "Expansion urbaine sur trente ans", when: "1995 · 2005 · 2015 · 2025", ctx: "Google Earth Engine",
+sum: "Mesure de l'étalement du bâti décennie par décennie.",
+goal: "Quantifier la croissance urbaine et localiser les fronts d'urbanisation.",
+steps: ["Calcul d'un indice d'urbanisation sur chaque date.", "Classification de l'occupation du sol par Random Forest.", "Comparaison diachronique et cartes de l'évolution du bâti."],
+tools: ["Landsat", "Random Forest", "Classification", "Google Earth Engine", "Détection de changements"] },
+{ d: "risque", t: "Risque d'érosion hydrique (RUSLE)", when: "Projet GEE", ctx: "Google Earth Engine",
+sum: "Estimation de la perte en sol et cartographie des classes de risque.",
+goal: "Identifier les secteurs les plus exposés à l'érosion pour orienter l'aménagement.",
+steps: ["Calcul des facteurs R (pluie), K (sol), LS (pente), C (couvert) et P (pratiques).", "Combinaison des facteurs selon le modèle RUSLE.", "Classement du risque et carte avec légende."],
+tools: ["MNT", "Google Earth Engine"] },
+{ d: "risque", t: "Impacts du séisme d'Al Haouz", when: "Septembre 2023", ctx: "Radar Sentinel-1",
+sum: "Localisation des zones touchées par détection de changements sur images radar.",
+goal: "Fournir une vue rapide des dégâts à partir de données disponibles quelle que soit la météo.",
+steps: ["Interprétation des images radar avant et après le séisme.", "Mise en œuvre de techniques de détection des changements.", "Analyse géospatiale des impacts."],
+tools: ["Sentinel-1", "Détection de changements"] },
+{ d: "eau", t: "Ressources en eau des barrages", when: "2016–2026", ctx: "Bin El Ouidane",
+sum: "Suivi de la surface en eau et estimation du volume des réservoirs.",
+goal: "Mesurer les variations de stockage de l'eau en milieu semi-aride.",
+steps: ["Extraction de masques d'eau sur une série temporelle.", "Intégration de MNT pour estimer le volume des réservoirs.", "Analyse des variations temporelles du stockage."],
+tools: ["Sentinel-2", "MNT", "Indices spectraux", "Google Earth Engine"] },
+{ d: "eau", t: "Eaux souterraines du Tadla", when: "Projet académique", ctx: "Plaine du Tadla",
+sum: "Quantification des fluctuations du niveau des nappes phréatiques.",
+goal: "Contribuer à une gestion durable des ressources en eau souterraine.",
+steps: ["Quantification des fluctuations du niveau des nappes phréatiques.", "Analyse spatiale et temporelle des variations.", "Contribution à la gestion durable des ressources en eau."],
+tools: ["Piézométrie", "SIG"] },
+{ d: "eau", t: "Bassin versant du barrage Kheng Grou", when: "Projet académique", ctx: "Hydrologie et environnement",
+sum: "Caractérisation hydrologique et environnementale du bassin versant.",
+goal: "Comprendre les processus d'écoulement et l'érosion des sols du bassin.",
+steps: ["Analyse du bassin versant axée sur les processus hydrologiques.", "Étude de l'érosion des sols.", "Évaluation environnementale par techniques géomatiques."],
+tools: ["MNT", "Hydrologie", "SIG"] },
+{ d: "climat", t: "Reconstitution de données météorologiques", when: "Projet académique", ctx: "Jeux de données NetCDF",
+sum: "Traitement et interpolation de données climatiques pour combler les stations.",
+goal: "Disposer de séries climatiques complètes pour les applications environnementales.",
+steps: ["Lecture et traitement de jeux de données NetCDF.", "Interpolation des variables climatiques.", "Reconstitution des séries des stations météorologiques."],
+tools: ["Interpolation"] }
+];
+/* ---------- layers (sections) ---------- */
+var LAYERS = [
+{ id: "accueil", label: "Accueil", color: "#93A3B8" },
+{ id: "profil", label: "Profil", color: "#4C9BFF" },
+{ id: "services", label: "Services", color: "#F08C2E" },
+{ id: "parcours", label: "Parcours", color: "#22A06B" },
+{ id: "projets", label: "Projets", color: "#F5C518" },
+{ id: "competences", label: "Compétences", color: "#E5484D" },
+{ id: "contact", label: "Contact", color: "#F5C518" }
+];
+var layersEl = $("#layers"), mnav = $("#mnav");
+LAYERS.forEach(function (l) {
+var li = document.createElement("li");
+li.innerHTML = '<a href="#' + l.id + '" data-id="' + l.id + '"><span class="chk"></span><span class="sw" style="background:' + l.color + '"></span><span>' + l.label + '</span></a>';
+layersEl.appendChild(li);
+var a = document.createElement("a"); a.href = "#" + l.id; a.dataset.id = l.id; a.textContent = l.label; mnav.appendChild(a);
+});
+function setActive(id) {
+$$("[data-id]").forEach(function (a) { a.classList.toggle("on", a.dataset.id === id); });
+var l = LAYERS.filter(function (x) { return x.id === id; })[0];
+if (l) $("#st-layer").textContent = l.label;
+}
+setActive("accueil");
+if ("IntersectionObserver" in window) {
+var visible = {};
+var io = new IntersectionObserver(function (entries) {
+entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting ? e.intersectionRatio : 0; });
+var best = null, score = 0;
+LAYERS.forEach(function (l) { if ((visible[l.id] || 0) > score) { score = visible[l.id]; best = l.id; } });
+if (best) setActive(best);
+}, { threshold: [0, .15, .3, .5, .75, 1], rootMargin: "-20% 0px -45% 0px" });
+$$("[data-layer]").forEach(function (s) { io.observe(s); });
+}
+/* ---------- cursor → coordinates ---------- */
+var coord = $("#st-coord");
+window.addEventListener("pointermove", function (e) {
+var lon = -(6.45 - (e.clientX / window.innerWidth) * 0.20);
+var lat = 32.42 - (e.clientY / window.innerHeight) * 0.16;
+coord.textContent = lat.toFixed(4) + "°N " + Math.abs(lon).toFixed(4) + "°W";
+}, { passive: true });
+/* ---------- theme ---------- */
+var root = document.documentElement;
+function effective() { var t = root.getAttribute("data-theme"); if (t) return t; return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; }
+function paintThemeLabel() { var t = effective(); $("#theme-label").textContent = t === "dark" ? "sombre" : "clair"; $("#theme-btn-m").textContent = t === "dark" ? "Clair" : "Sombre"; }
+try { var saved = localStorage.getItem("zh-theme"); if (saved) root.setAttribute("data-theme", saved); } catch (e) {}
+function toggleTheme() {
+var next = effective() === "dark" ? "light" : "dark";
+root.setAttribute("data-theme", next);
+try { localStorage.setItem("zh-theme", next); } catch (e) {}
+paintThemeLabel();
+}
+$("#theme-btn").addEventListener("click", toggleTheme);
+$("#theme-btn-m").addEventListener("click", toggleTheme);
+paintThemeLabel();
+/* ---------- orbiting satellite ---------- */
+var wrap = $("#portrait-wrap"), satBox = $("#sats");
+var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// two orbits drawn in the SVG (viewBox 0..100 over a box 1.32x the portrait)
+var ORBITS = [
+{ rx: .49, ry: .17, rot: -18, speed: 1 / 2600 },
+{ rx: .45, ry: .21, rot: 22, speed: -1 / 3400 },
+{ rx: .44, ry: .12, rot: 80, speed: 1 / 2200 },     // near-polar weather orbit
+{ rx: .50, ry: .50, rot: 0, speed: 1 / 6000 }       // outer ring: always outside the portrait
+];
+var SATS = [
+{ n: "Sentinel-2", o: 0, p: 0.35, c: "#1F6FEB" },
+{ n: "Landsat 9", o: 0, p: 2.45, c: "#22A06B" },
+{ n: "MODIS", o: 0, p: 4.55, c: "#A26EF0" },
+{ n: "Sentinel-1", o: 1, p: 1.2, c: "#4C9BFF" },
+{ n: "Landsat 8", o: 1, p: 4.3, c: "#2FB37A" },
+{ n: "MetOp", o: 2, p: 0.9, c: "#F08C2E" },
+{ n: "Meteosat", o: 3, p: -2.35, c: "#E5484D", outer: true }
+];
+SATS.forEach(function (s) {
+var el = document.createElement("div"); el.className = "sat"; el.style.setProperty("--c", s.c);
+el.innerHTML = "<i></i><span>" + s.n + "</span>"; satBox.appendChild(el); s.el = el;
+});
+function placeAll(ms) {
+var w = wrap.clientWidth, c = w / 2, box = w * 1.32;
+SATS.forEach(function (s) {
+var o = ORBITS[s.o], t = s.p + ms * o.speed, rot = o.rot * Math.PI / 180;
+var x = box * o.rx * Math.cos(t), y = box * o.ry * Math.sin(t);
+var X = c + x * Math.cos(rot) - y * Math.sin(rot), Y = c + x * Math.sin(rot) + y * Math.cos(rot);
+s.el.style.transform = "translate(" + (X - 4.5) + "px," + (Y - 4.5) + "px)";
+s.el.style.zIndex = s.outer ? 3 : ((o.speed > 0 ? Math.sin(t) : -Math.sin(t)) < 0 ? 1 : 3); // far side passes behind the portrait; the outer ring never crosses it
+});
+}
+if (reduce) placeAll(0);
+else { var t0 = null; (function loop(ts) { if (t0 === null) t0 = ts; placeAll(ts - t0); requestAnimationFrame(loop); })(performance.now()); }
+window.addEventListener("resize", function () { if (reduce) placeAll(0); });
+/* ---------- tabs ---------- */
+var tabs = $$('[role="tab"]');
+function selectTab(tab) {
+tabs.forEach(function (t) { var on = t === tab; t.setAttribute("aria-selected", on); t.tabIndex = on ? 0 : -1; $("#" + t.getAttribute("aria-controls")).hidden = !on; });
+}
+tabs.forEach(function (t, i) {
+t.addEventListener("click", function () { selectTab(t); });
+t.addEventListener("keydown", function (e) {
+if (e.key === "ArrowRight" || e.key === "ArrowLeft") { var n = tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length]; selectTab(n); n.focus(); }
+});
+});
+/* ---------- projects: filters + expandable cards ---------- */
+var state = { domain: "all", tool: null };
+var filtersEl = $("#filters"), grid = $("#projects");
+function countFor(dom) { return PROJECTS.filter(function (p) { return dom === "all" || p.d === dom; }).length; }
+var chipDefs = [{ k: "all", label: "Tous", color: null }].concat(Object.keys(DOMAINS).map(function (k) { return { k: k, label: DOMAINS[k].label, color: DOMAINS[k].color }; }));
+chipDefs.forEach(function (c) {
+var b = document.createElement("button");
+b.type = "button"; b.className = "chip"; b.dataset.k = c.k;
+b.innerHTML = (c.color ? '<span class="sw" style="background:' + c.color + '"></span>' : "") + c.label + ' <span class="n">' + countFor(c.k) + "</span>";
+b.addEventListener("click", function () { state.domain = c.k; render(); });
+filtersEl.appendChild(b);
+});
+function render() {
+$$(".chip", filtersEl).forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.k === state.domain); });
+var at = $("#active-tool");
+at.classList.toggle("show", !!state.tool);
+$("#active-tool-label").textContent = state.tool ? "Outil : " + state.tool : "";
+var list = PROJECTS.filter(function (p) {
+return (state.domain === "all" || p.d === state.domain) && (!state.tool || p.tools.indexOf(state.tool) > -1);
+});
+$("#result-count").textContent = list.length + (list.length > 1 ? " projets" : " projet");
+grid.innerHTML = "";
+if (!list.length) { grid.innerHTML = '<div class="empty">Aucun projet ne correspond à ce filtre. Essayez « Tous ».</div>'; return; }
+list.forEach(function (p) {
+var i = PROJECTS.indexOf(p), dom = DOMAINS[p.d];
+var card = document.createElement("article");
+card.className = "p-card";
+card.innerHTML =
+'<button class="p-head" type="button" aria-expanded="false" aria-controls="pd-' + i + '">' +
+'<span class="p-meta"><span class="p-dom"><span class="sw" style="background:' + dom.color + '"></span>' + dom.label + '</span><span>' + p.when + '</span></span>' +
+'<h3>' + p.t + '</h3>' +
+'<p class="p-sum">' + p.sum + '</p>' +
+'<span class="p-tags">' + p.tools.map(function (t) { return '<span class="' + (t === state.tool ? "match" : "") + '">' + t + '</span>'; }).join("") + '</span>' +
+'<span class="p-more"><span class="lbl">Voir la démarche</span> <span class="arr">⌄</span></span>' +
+'</button>' +
+'<div class="p-detail" id="pd-' + i + '" hidden>' +
+'<div><h4>Contexte</h4><p>' + p.ctx + '</p></div>' +
+'<div><h4>Objectif</h4><p>' + p.goal + '</p></div>' +
+'<div><h4>Démarche</h4><ul>' + p.steps.map(function (s) { return "<li>" + s + "</li>"; }).join("") + '</ul></div>' +
+'</div>';
+var head = $(".p-head", card), det = $(".p-detail", card);
+head.addEventListener("click", function () {
+var open = head.getAttribute("aria-expanded") === "true";
+head.setAttribute("aria-expanded", !open); det.hidden = open; card.classList.toggle("open", !open);
+$(".lbl", card).textContent = open ? "Voir la démarche" : "Masquer la démarche";
+});
+grid.appendChild(card);
+});
+}
+$("#clear-tool").addEventListener("click", function () { state.tool = null; render(); });
+render();
+/* ---------- skills → filter projects by tool ---------- */
+$$(".s-list[data-tools]").forEach(function (box) {
+box.dataset.tools.split("|").forEach(function (tool) {
+var n = PROJECTS.filter(function (p) { return p.tools.indexOf(tool) > -1; }).length;
+if (!n) { var sp = document.createElement("span"); sp.className = "plain"; sp.textContent = tool; box.appendChild(sp); return; }
+var b = document.createElement("button");
+b.type = "button"; b.className = "tool";
+b.innerHTML = tool + (n ? "<sup>" + n + "</sup>" : "");
+b.addEventListener("click", function () {
+if (!n) { toast("Aucun projet listé pour " + tool + " pour l'instant"); return; }
+state.tool = tool; state.domain = "all"; render();
+$("#projets").scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
+toast(n + (n > 1 ? " projets utilisent " : " projet utilise ") + tool);
+});
+box.appendChild(b);
+});
+});
+/* ---------- satellite archive ---------- */
+var Y0 = 1972, Y1 = 2026, span = Y1 - Y0;
+var MISSIONS = [
+{ n: "Landsat 1–5", s: 1972, e: 2013, c: "#7FBF8E", sensor: "MSS, puis TM", res: "60 m (MSS) · 30 m (TM)", rev: "16 à 18 jours", use: "Séries longues d'occupation du sol et de végétation." },
+{ n: "Landsat 8", s: 2013, e: null, c: "#2FB37A", sensor: "OLI / TIRS", res: "30 m · 15 m panchro · 100 m thermique", rev: "16 jours", use: "Indices spectraux, classification, température de surface." },
+{ n: "Landsat 9", s: 2021, e: null, c: "#1E8A5A", sensor: "OLI-2 / TIRS-2", res: "30 m · 15 m panchro", rev: "16 jours (8 avec Landsat 8)", use: "Continuité de la série Landsat, suivi récent." },
+{ n: "MODIS", s: 2000, e: null, c: "#A26EF0", sensor: "Terra / Aqua", res: "250 m à 1 km", rev: "Quotidienne", use: "Suivi régional de la végétation, de la température et de la sécheresse." },
+{ n: "Sentinel-1", s: 2014, e: null, c: "#4C9BFF", sensor: "Radar SAR bande C", res: "10 m (mode IW)", rev: "6 à 12 jours", use: "Inondations, séismes et suivi par tout temps, de jour comme de nuit." },
+{ n: "Sentinel-2", s: 2015, e: null, c: "#1F6FEB", sensor: "MSI, 13 bandes", res: "10 m · 20 m · 60 m", rev: "5 jours", use: "Végétation, eau, occupation du sol, agriculture de précision." },
+{ n: "Meteosat", s: 1977, e: null, c: "#E5484D", meteo: true, sensor: "Géostationnaire · SEVIRI, puis FCI (MTG)", res: "1 à 3 km", rev: "Toutes les 10 à 15 minutes", use: "Nuages, précipitations, température : suivi météorologique et climatique de l'Afrique et de l'Europe." },
+{ n: "NOAA / MetOp", s: 1978, e: null, c: "#F08C2E", meteo: true, sensor: "Orbite polaire · AVHRR", res: "1,1 km", rev: "Quotidienne", use: "Séries longues de NDVI et de température de surface, suivi des sécheresses." },
+{ n: "GPM", s: 2014, e: null, c: "#C2410C", meteo: true, sensor: "Radar de précipitations · produit IMERG", res: "0,1° (environ 10 km)", rev: "Toutes les 30 minutes", use: "Estimation des pluies, analyse des sécheresses et des épisodes extrêmes." }
+];
+var rowsEl = $("#arc-rows"), info = $("#arc-info");
+function showMission(m, btn) {
+$$(".arc-row", rowsEl).forEach(function (r) { r.setAttribute("aria-selected", r === btn); });
+info.style.setProperty("--c", m.c);
+info.innerHTML = (m.meteo ? '<div class="meteo-tag">Satellite météo</div>' : "") + "<h3>" + m.n + "</h3><div class=\"yrs\">" + m.s + " → " + (m.e || "aujourd'hui") + "</div>" +
+"<dl><dt>Capteur</dt><dd>" + m.sensor + "</dd><dt>Résolution</dt><dd>" + m.res + "</dd><dt>Revisite</dt><dd>" + m.rev + "</dd></dl><p>" + m.use + "</p>";
+}
+MISSIONS.forEach(function (m, i) {
+var b = document.createElement("button"); b.type = "button"; b.className = "arc-row"; b.setAttribute("role", "option");
+var l = (m.s - Y0) / span * 100, w = ((m.e || Y1) - m.s) / span * 100;
+b.innerHTML = '<span class="lbl">' + m.n + (m.meteo ? ' <small class="mt">météo</small>' : "") + '</span><span class="arc-track"><span class="arc-bar' + (m.e ? "" : " live") + '" style="left:' + l + "%;width:" + w + "%;background:" + m.c + '"></span></span>';
+b.addEventListener("click", function () { showMission(m, b); });
+b.addEventListener("mouseenter", function () { showMission(m, b); });
+b.addEventListener("focus", function () { showMission(m, b); });
+rowsEl.appendChild(b);
+if (m.n === "Sentinel-2") showMission(m, b);
+});
+var axis = $("#arc-axis");
+axis.innerHTML = "<span></span><div class=\"ticks\">" + [1972, 1985, 2000, 2013, 2026].map(function (y) { return '<span style="left:' + ((y - Y0) / span * 100) + '%">' + y + "</span>"; }).join("") + "</div>";
+/* ---------- quote builder ---------- */
+var F = { type: $("#q-type"), zone: $("#q-zone"), usage: $("#q-usage"), format: $("#q-format"), delay: $("#q-delay"), name: $("#q-name"), msg: $("#q-msg") };
+function quoteText() {
+var lines = [
+"Bonjour Zouhayr,",
+"",
+"Je souhaiterais connaître le prix pour : " + F.type.value + ".",
+"Zone d'étude : " + (F.zone.value.trim() || "à préciser"),
+"Utilisation : " + F.usage.value,
+"Format : " + F.format.value,
+"Délai souhaité : " + F.delay.value
+];
+if (F.msg.value.trim()) lines.push("Précisions : " + F.msg.value.trim());
+lines.push("", "Merci" + (F.name.value.trim() ? ",\n" + F.name.value.trim() : "."));
+return lines.join("\n");
+}
+function updateQuote() {
+var t = quoteText();
+$("#q-preview").textContent = t;
+$("#q-wa").href = "https://wa.me/212616393377?text=" + encodeURIComponent(t);
+$("#q-mail").href = "mailto:zouhayrhaqqui2@gmail.com?subject=" + encodeURIComponent("Demande de devis : " + F.type.value) + "&body=" + encodeURIComponent(t);
+$$(".mt-chip").forEach(function (c) { c.setAttribute("aria-pressed", c.dataset.map === F.type.value); });
+}
+Object.keys(F).forEach(function (k) { F[k].addEventListener("input", updateQuote); F[k].addEventListener("change", updateQuote); });
+$("#quote-form").addEventListener("submit", function (e) { e.preventDefault(); });
+$$(".mt-chip").forEach(function (c) {
+c.addEventListener("click", function () {
+F.type.value = c.dataset.map; updateQuote();
+$("#devis").scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
+setTimeout(function () { F.zone.focus({ preventScroll: true }); }, reduce ? 0 : 450);
+});
+});
+$("#q-copy").addEventListener("click", function () {
+try { navigator.clipboard.writeText(quoteText()).then(function () { toast("Message copié"); }, function () { toast("Copie impossible, sélectionnez le texte"); }); }
+catch (e) { toast("Copie impossible, sélectionnez le texte"); }
+});
+updateQuote();
+/* ---------- price links on service cards ---------- */
+$$("button.price-link[data-quote]").forEach(function (b) {
+b.addEventListener("click", function () {
+F.type.value = b.dataset.quote; updateQuote();
+$("#devis").scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
+setTimeout(function () { F.zone.focus({ preventScroll: true }); }, reduce ? 0 : 450);
+});
+});
+/* ---------- training request builder ---------- */
+var T = { fmt: "Cours + TP", who: "Individuel", lvl: "Débutant", mod: "À distance" };
+function selectedTrainings() { return $$(".tr-card").filter(function (c) { return c.getAttribute("aria-pressed") === "true"; }).map(function (c) { return c.dataset.tr; }); }
+function trainingText() {
+var list = selectedTrainings();
+var who = T.who === "Groupe" ? "Groupe de " + (parseInt($("#t-n").value, 10) || 2) + " personnes" : "Individuel";
+var lines = [
+"Bonjour Zouhayr,",
+"",
+"Je souhaiterais connaître le prix d'une formation.",
+"Formation : " + (list.length ? list.join(" + ") : "à préciser"),
+"Format : " + T.fmt,
+"Participants : " + who,
+"Niveau : " + T.lvl,
+"Modalité : " + T.mod
+];
+if ($("#t-msg").value.trim()) lines.push("Précisions : " + $("#t-msg").value.trim());
+lines.push("", "Merci" + ($("#t-name").value.trim() ? ",\n" + $("#t-name").value.trim() : "."));
+return lines.join("\n");
+}
+function updateTraining() {
+var t = trainingText(), list = selectedTrainings();
+$("#t-preview").textContent = t;
+$("#t-wa").href = "https://wa.me/212616393377?text=" + encodeURIComponent(t);
+$("#t-mail").href = "mailto:zouhayrhaqqui2@gmail.com?subject=" + encodeURIComponent("Demande de prix : formation " + (list.join(" + ") || "")) + "&body=" + encodeURIComponent(t);
+$("#grp-size").hidden = T.who !== "Groupe";
+}
+$$(".tr-card").forEach(function (c) {
+c.addEventListener("click", function () {
+var on = c.getAttribute("aria-pressed") === "true";
+if (on && selectedTrainings().length === 1) { toast("Gardez au moins une formation"); return; }
+c.setAttribute("aria-pressed", !on); updateTraining();
+});
+});
+[["fmt", "data-fmt"], ["who", "data-who"], ["lvl", "data-lvl"], ["mod", "data-mod"]].forEach(function (pair) {
+var btns = $$("[" + pair[1] + "]");
+btns.forEach(function (b) {
+b.addEventListener("click", function () {
+btns.forEach(function (x) { x.setAttribute("aria-checked", x === b); });
+T[pair[0]] = b.getAttribute(pair[1]); updateTraining();
+});
+});
+});
+["#t-n", "#t-name", "#t-msg"].forEach(function (id) { $(id).addEventListener("input", updateTraining); });
+$("#t-copy").addEventListener("click", function () {
+try { navigator.clipboard.writeText(trainingText()).then(function () { toast("Message copié"); }, function () { toast("Copie impossible, sélectionnez le texte"); }); }
+catch (e) { toast("Copie impossible, sélectionnez le texte"); }
+});
+updateTraining();
+/* ---------- copy + toast ---------- */
+var tEl = $("#toast"), tTimer;
+function toast(msg) { tEl.textContent = msg; tEl.classList.add("show"); clearTimeout(tTimer); tTimer = setTimeout(function () { tEl.classList.remove("show"); }, 2000); }
+$$("[data-copy]").forEach(function (b) {
+b.addEventListener("click", function () {
+try { navigator.clipboard.writeText(b.dataset.copy).then(function () { toast("Copié : " + b.dataset.copy); }, function () { toast("Copie impossible, sélectionnez le texte"); }); }
+catch (e) { toast("Copie impossible, sélectionnez le texte"); }
+});
+});
+})();
+</script>
+</body>
+</html>
